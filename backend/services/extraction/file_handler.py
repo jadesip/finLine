@@ -1,5 +1,6 @@
 """
 File handling and processing utilities for extraction.
+Ported from FinForge - MUST remain identical for consistent behavior.
 """
 
 import hashlib
@@ -11,20 +12,34 @@ from typing import Any
 import fitz  # PyMuPDF
 from PIL import Image
 
+from .text_extractor import DocumentType, StructuredText, TextExtractor
+
 logger = logging.getLogger(__name__)
 
 
 class FileHandler:
-    """Handles file processing for extraction pipeline."""
+    """
+    Handles file processing for extraction pipeline.
+
+    Supports PDF and image files, converting them to a standard format
+    for LLM processing.
+    """
 
     SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"}
     SUPPORTED_PDF_FORMAT = ".pdf"
     MAX_FILE_SIZE_MB = 50
-    PDF_DPI = 300
+    PDF_DPI = 300  # High quality for financial tables
 
     def __init__(self, upload_dir: str = "uploads"):
+        """
+        Initialize file handler.
+
+        Args:
+            upload_dir: Directory for storing uploaded files
+        """
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(exist_ok=True)
+        self.text_extractor = TextExtractor()
         logger.info(f"FileHandler initialized with upload directory: {self.upload_dir}")
 
     async def process_file(
@@ -32,12 +47,19 @@ class FileHandler:
         file_bytes: bytes,
         filename: str,
         store_original: bool = True,
-    ) -> tuple[list[bytes], str, dict[str, Any]]:
+        extract_text: bool = True,
+    ) -> tuple[list[bytes], str, dict[str, Any], StructuredText | None]:
         """
         Process uploaded file and convert to images.
 
+        Args:
+            file_bytes: Raw file bytes
+            filename: Original filename
+            store_original: Whether to store the original file
+            extract_text: Whether to extract text from PDF
+
         Returns:
-            Tuple of (image_list, file_hash, metadata)
+            Tuple of (image_list, file_hash, metadata, structured_text)
         """
         file_size_mb = len(file_bytes) / (1024 * 1024)
         if file_size_mb > self.MAX_FILE_SIZE_MB:
@@ -60,16 +82,45 @@ class FileHandler:
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
 
+        # Analyze document type
+        doc_type = self.text_extractor.analyze_document(file_bytes, filename)
+
+        # Extract text if applicable
+        structured_text = None
+        text_quality = None
+
+        if extract_text and doc_type == DocumentType.PDF_WITH_TEXT:
+            logger.info("Extracting text from PDF (hybrid extraction enabled)")
+            try:
+                pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+                text_quality = self.text_extractor.assess_text_quality(pdf_doc)
+
+                # Use basic text extraction
+                structured_text = self.text_extractor.extract_structured_text_basic(pdf_doc)
+                pdf_doc.close()
+                logger.info(
+                    f"Extracted {len(structured_text.pages)} pages with basic text extraction"
+                )
+            except Exception as e:
+                logger.error(f"Text extraction failed: {e}")
+                structured_text = None
+
         metadata = {
             "original_filename": filename,
             "file_type": file_type,
             "file_size_mb": file_size_mb,
             "file_hash": file_hash,
             "page_count": len(images),
+            "document_type": doc_type.value,
+            "has_text": structured_text is not None,
+            "text_quality": text_quality.__dict__ if text_quality else None,
         }
 
-        logger.info(f"File processed: {len(images)} images extracted")
-        return images, file_hash, metadata
+        logger.info(
+            f"File processed: {len(images)} images extracted, document type: {doc_type.value}"
+        )
+
+        return images, file_hash, metadata, structured_text
 
     async def _process_pdf(self, pdf_bytes: bytes) -> list[bytes]:
         """Convert PDF to images."""

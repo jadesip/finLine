@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, UserResponse, SubscriptionResponse } from "@/lib/api";
@@ -14,7 +14,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const search_params = useSearchParams();
 
@@ -119,6 +119,18 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }
 

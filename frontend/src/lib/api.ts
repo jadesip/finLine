@@ -53,11 +53,13 @@ export interface ProjectMeta {
   version: string;
   name: string;
   company_name: string;
+  country_of_headquarters?: string;
   currency: string;
   unit: string;
   frequency: string;
   financial_year_end: string;
   last_historical_period: string;
+  number_of_periods_forecast?: number;
   created_date: string;
   last_modified: string;
 }
@@ -121,13 +123,22 @@ export interface ReferenceRateCurve {
 export interface Financials {
   income_statement: IncomeStatement;
   cash_flow_statement: CashFlowStatement;
+  balance_sheet: BalanceSheet;
 }
 
 export interface IncomeStatement {
-  revenue: Record<string, DataPoint>;
-  ebitda: EbitdaEntry[];
-  ebit: Array<{ data: Record<string, DataPoint> }>;
-  d_and_a: Array<{ data: Record<string, DataPoint> }>;
+  revenue?: Record<string, DataPoint>;
+  cogs?: Record<string, DataPoint>;
+  gross_profit?: Record<string, DataPoint>;
+  opex?: Record<string, DataPoint>;
+  "d&a"?: Record<string, DataPoint>;
+  ebit?: Record<string, DataPoint>;
+  interest_expense?: Record<string, DataPoint>;
+  interest_income?: Record<string, DataPoint>;
+  profit_before_tax?: Record<string, DataPoint>;
+  tax?: Record<string, DataPoint>;
+  net_income?: Record<string, DataPoint>;
+  ebitda?: EbitdaEntry[] | Record<string, DataPoint>;
 }
 
 export interface EbitdaEntry {
@@ -138,8 +149,11 @@ export interface EbitdaEntry {
 }
 
 export interface CashFlowStatement {
-  capex: Record<string, DataPoint>;
-  working_capital: Record<string, DataPoint>;
+  capex?: Record<string, DataPoint>;
+}
+
+export interface BalanceSheet {
+  working_capital?: Record<string, DataPoint>;
 }
 
 export interface DataPoint {
@@ -223,6 +237,112 @@ export interface ChatResponse {
   updates: ChatUpdate[];
   applied: boolean;
   error?: string;
+}
+
+// Extraction types
+export interface ExtractionResponse {
+  extraction_id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  message: string;
+  progress: number;
+  result?: {
+    status: string;
+    raw_data?: Record<string, any>;
+    mapped_data?: Record<string, any>;
+    insights_data?: Record<string, any>;
+    metadata?: {
+      extraction_id: string;
+      file_name: string;
+      file_type: string;
+      file_size_mb: number;
+      extraction_time_seconds: number;
+    };
+  };
+}
+
+export interface ExtractionStatusResponse {
+  extraction_id: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  message: string;
+  progress: number;
+  result?: ExtractionResponse["result"];
+}
+
+// Insights types
+export interface InsightsData {
+  business_insights: {
+    business_description: {
+      summary: string;
+      confidence: "high" | "medium" | "low";
+    };
+    revenue_model: {
+      key_products_services: string[];
+      revenue_streams: string[];
+      customer_segments: string[];
+      geographic_markets: string[];
+      business_segments: Array<{ name: string; description: string; revenue_contribution?: string }>;
+    };
+    cost_structure: {
+      fixed_costs: string[];
+      variable_costs: string[];
+      key_cost_drivers: string[];
+      operating_leverage?: string;
+    };
+    capital_requirements: {
+      capex_types: string[];
+      capital_intensity: "high" | "medium" | "low";
+      key_assets: string[];
+      investment_focus?: string;
+    };
+    management_team: Array<{
+      name: string;
+      position: string;
+      age?: number;
+      tenure?: string;
+      career_summary?: string;
+      linkedin_profile?: string;
+      previous_roles: string[];
+      board_member: boolean;
+    }>;
+  };
+  strategic_analysis: {
+    strategy: {
+      business_strategy?: string;
+      competitive_positioning?: string;
+      differentiation?: string;
+      growth_initiatives: string[];
+    };
+    swot_analysis: {
+      strengths: string[];
+      weaknesses: string[];
+      opportunities: string[];
+      threats: string[];
+    };
+    industry_context: {
+      market_characteristics?: string;
+      growth_trends?: string;
+      regulatory_factors: string[];
+      competitive_dynamics?: string;
+    };
+    recent_events: Array<{
+      date?: string;
+      event_type: string;
+      description: string;
+      impact?: string;
+    }>;
+    risk_analysis: {
+      revenue_concentration: { flag: boolean; top_client_percentage?: number; details?: string };
+      liquidity_concerns: { flag: boolean; cash_runway?: string; details?: string };
+      related_party_transactions: { flag: boolean; transactions: string[]; details?: string };
+      governance_issues: { flag: boolean; issues: string[]; details?: string };
+      strategic_inconsistencies: { flag: boolean; inconsistencies: string[]; details?: string };
+      financial_red_flags: { flag: boolean; flags: string[]; details?: string };
+      operational_risks: { flag: boolean; risks: string[]; details?: string };
+      market_risks: { flag: boolean; risks: string[]; details?: string };
+      overall_risk_assessment: "low" | "medium" | "high" | "critical";
+    };
+  };
+  last_updated?: string;
 }
 
 // Subscription types
@@ -539,6 +659,90 @@ export const api = {
         return_url: `${window.location.origin}/settings`,
       }),
     });
+    return handle_response(response);
+  },
+
+  // Extraction
+  async upload_and_extract(
+    project_id: string,
+    file: File
+  ): Promise<ExtractionResponse> {
+    const form_data = new FormData();
+    form_data.append("file", file);
+    form_data.append("extract_immediately", "true");
+
+    const response = await fetch(
+      `${API_URL}/api/projects/${project_id}/extract`,
+      {
+        method: "POST",
+        headers: get_auth_header(),
+        body: form_data,
+      }
+    );
+    return handle_response(response);
+  },
+
+  async get_extraction_status(
+    project_id: string,
+    extraction_id: string
+  ): Promise<ExtractionStatusResponse> {
+    const response = await fetch(
+      `${API_URL}/api/projects/${project_id}/extractions/${extraction_id}`,
+      {
+        headers: get_auth_header(),
+      }
+    );
+    return handle_response(response);
+  },
+
+  async merge_extraction(
+    project_id: string,
+    extraction_id: string,
+    strategy: "overlay" | "replace" | "manual" = "overlay"
+  ): Promise<{ status: string; message: string }> {
+    const response = await fetch(
+      `${API_URL}/api/projects/${project_id}/extractions/${extraction_id}/merge`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...get_auth_header(),
+        },
+        body: JSON.stringify({ merge_strategy: strategy }),
+      }
+    );
+    return handle_response(response);
+  },
+
+  // Insights
+  async get_insights(
+    project_id: string,
+    topics: string[] = ["industry", "competitors", "market_trends", "risks"]
+  ): Promise<InsightsData | null> {
+    const response = await fetch(
+      `${API_URL}/api/projects/${project_id}/insights`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...get_auth_header(),
+        },
+        body: JSON.stringify({ topics }),
+      }
+    );
+    if (response.status === 404) {
+      return null;
+    }
+    return handle_response(response);
+  },
+
+  async get_quick_insights(project_id: string): Promise<any> {
+    const response = await fetch(
+      `${API_URL}/api/projects/${project_id}/insights/quick`,
+      {
+        headers: get_auth_header(),
+      }
+    );
     return handle_response(response);
   },
 };

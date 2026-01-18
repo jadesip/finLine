@@ -2,6 +2,8 @@
 finLine Document Extractor
 
 Main extraction orchestrator using vision LLMs.
+IMPORTANT: Must match FinForge's extraction behavior exactly.
+Uses hybrid text+image extraction when text is available for accurate number parsing.
 """
 
 import base64
@@ -15,11 +17,12 @@ from typing import Any
 
 import httpx
 
-from config import get_settings
+from config import get_settings, ExtractionConfig
 from .file_handler import FileHandler
 from .image_optimizer import ImageOptimizer
 from .models import ExtractionMetadata, ExtractionResult
 from .prompts import ExtractionPrompts
+from .text_extractor import TextExtractor
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -66,10 +69,16 @@ class DocumentExtractor:
         logger.info(f"Starting extraction {extraction_id} for {filename} ({file_size_mb:.2f}MB)")
 
         try:
-            # Process file to images
-            images, file_hash, file_metadata = await self.file_handler.process_file(
-                file_bytes, filename, store_original=True
+            # Process file to images AND extract structured text (hybrid extraction)
+            images, file_hash, file_metadata, structured_text = await self.file_handler.process_file(
+                file_bytes, filename, store_original=True, extract_text=True
             )
+
+            # Log hybrid extraction status
+            if structured_text:
+                logger.info(f"Hybrid extraction enabled: {len(structured_text.pages)} pages of text extracted")
+            else:
+                logger.info("Image-only extraction: no structured text available")
 
             # Optimize images
             optimized_images = []
@@ -82,30 +91,90 @@ class DocumentExtractor:
             logger.info("Starting LLM extraction...")
 
             # Phase 1: Extract metadata from first few pages
+            # Temperature: 0.1 (matches FinForge)
             metadata_response = await self._extract_with_vision(
                 optimized_images[:3],
-                ExtractionPrompts.get_metadata_prompt()
+                ExtractionPrompts.get_metadata_prompt(),
+                temperature=ExtractionConfig.TEMP_METADATA
             )
+
+            # CRITICAL DEBUG: Log raw metadata response
+            logger.info("=" * 80)
+            logger.info("RAW LLM METADATA RESPONSE:")
+            logger.info(metadata_response[:1500] if metadata_response else "EMPTY RESPONSE")
+            logger.info("=" * 80)
+
             metadata = self._parse_json_response(metadata_response)
-            logger.info(f"Extracted metadata: company={metadata.get('company_name')}")
+
+            # DETAILED METADATA DEBUG
+            logger.info("=" * 80)
+            logger.info("PARSED METADATA DEBUG:")
+            logger.info(f"  Company: {metadata.get('company_name')}")
+            logger.info(f"  Unit: {metadata.get('unit')}")
+            logger.info(f"  Currency: {metadata.get('currency')}")
+            logger.info(f"  Frequency: {metadata.get('frequency')}")
+            logger.info(f"  Last Historical Period: {metadata.get('last_historical_period')}")
+            logger.info(f"  All Years: {metadata.get('all_years')}")
+            logger.info(f"  Number of Forecast Periods: {metadata.get('number_of_periods_forecast')}")
+            logger.info("=" * 80)
 
             # Phase 2: Extract financial data
+            # Temperature: 0.1 (matches FinForge)
             years = metadata.get("all_years", ["2024", "2025", "2026", "2027", "2028"])
             currency = metadata.get("currency", "USD")
             unit = metadata.get("unit", "millions")
 
+            logger.info(f"Financial extraction params: years={years}, currency={currency}, unit={unit}")
+
+            # Use hybrid prompt if structured text is available (key for correct number parsing)
+            if structured_text and ExtractionConfig.USE_HYBRID_TEXT_IMAGE:
+                logger.info("Using HYBRID text+image prompt for financial extraction")
+                financial_prompt = ExtractionPrompts.get_hybrid_financial_data_prompt(
+                    years, currency, unit, structured_text
+                )
+            else:
+                logger.info("Using image-only prompt for financial extraction")
+                financial_prompt = ExtractionPrompts.get_financial_data_prompt(years, currency, unit)
+
             financial_response = await self._extract_with_vision(
                 optimized_images,
-                ExtractionPrompts.get_financial_data_prompt(years, currency, unit)
+                financial_prompt,
+                temperature=ExtractionConfig.TEMP_FINANCIAL_DATA
             )
+
+            # CRITICAL DEBUG: Log raw LLM response before parsing
+            logger.info("=" * 80)
+            logger.info("RAW LLM FINANCIAL RESPONSE (first 2000 chars):")
+            logger.info(financial_response[:2000] if financial_response else "EMPTY RESPONSE")
+            logger.info("=" * 80)
+
             financial_data = self._parse_json_response(financial_response)
 
+            # Log sample values for debugging - DETAILED
+            income_stmt = financial_data.get("financials", {}).get("income_statement", {})
+            sample_revenue = income_stmt.get("revenue", {})
+            sample_ebitda = income_stmt.get("ebitda", {})
+
+            logger.info("=" * 80)
+            logger.info("PARSED FINANCIAL DATA DEBUG:")
+            logger.info(f"  Unit from metadata: {unit}")
+            logger.info(f"  Currency: {currency}")
+            logger.info(f"  Years: {years}")
+            logger.info(f"  Revenue values: {sample_revenue}")
+            logger.info(f"  EBITDA values: {sample_ebitda}")
+
+            # Check for division issue - log first numeric value
+            for year, value in sample_revenue.items():
+                if value is not None:
+                    logger.info(f"  FIRST REVENUE VALUE: Year={year}, Value={value}, Type={type(value)}")
+                    break
+            logger.info("=" * 80)
+
             # Phase 3: Extract business insights
-            insights_response = await self._extract_with_vision(
-                optimized_images[:5],
-                ExtractionPrompts.get_business_insights_prompt(metadata)
+            # Use LangChain if enabled (matches FinForge behavior)
+            insights_data = await self._extract_business_insights(
+                optimized_images, structured_text, metadata
             )
-            insights_data = self._parse_json_response(insights_response)
 
             # Combine extracted data
             raw_data = {
@@ -116,6 +185,23 @@ class DocumentExtractor:
 
             # Map to finLine schema
             mapped_data = self._map_to_finline_schema(raw_data)
+
+            # CRITICAL DEBUG: Log mapped data
+            logger.info("=" * 80)
+            logger.info("FINAL MAPPED DATA DEBUG:")
+            mapped_meta = mapped_data.get("meta", {})
+            logger.info(f"  Meta.unit: {mapped_meta.get('unit')}")
+            logger.info(f"  Meta.currency: {mapped_meta.get('currency')}")
+            logger.info(f"  Meta.last_historical_period: {mapped_meta.get('last_historical_period')}")
+            logger.info(f"  Meta.frequency: {mapped_meta.get('frequency')}")
+
+            # Check financials in mapped data
+            base_case = mapped_data.get("cases", {}).get("base_case", {})
+            mapped_financials = base_case.get("financials", {})
+            mapped_income = mapped_financials.get("income_statement", {})
+            logger.info(f"  Mapped revenue: {mapped_income.get('revenue', {})}")
+            logger.info(f"  Mapped ebitda: {mapped_income.get('ebitda', {})}")
+            logger.info("=" * 80)
 
             extraction_time = time.time() - start_time
             logger.info(f"Extraction completed in {extraction_time:.2f}s")
@@ -144,18 +230,76 @@ class DocumentExtractor:
             logger.error(f"Extraction failed: {e}", exc_info=True)
             raise
 
-    async def _extract_with_vision(self, images: list[bytes], prompt: str) -> str:
+    async def _extract_business_insights(
+        self, images: list[bytes], structured_text: Any, metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Extract business insights using LangChain if enabled.
+        Matches FinForge's behavior exactly.
+        """
+        logger.info(f"=== BUSINESS INSIGHTS EXTRACTION ===")
+        logger.info(f"USE_LANGCHAIN_BUSINESS_INSIGHTS = {ExtractionConfig.USE_LANGCHAIN_BUSINESS_INSIGHTS}")
+
+        if ExtractionConfig.USE_LANGCHAIN_BUSINESS_INSIGHTS:
+            try:
+                logger.info("Attempting LangChain import...")
+                from .langchain_business_insights import LangChainBusinessInsights
+                logger.info("LangChain import successful")
+
+                logger.info("Initializing LangChainBusinessInsights...")
+                langchain_extractor = LangChainBusinessInsights(self.api_key)
+                logger.info("LangChainBusinessInsights initialized")
+
+                logger.info("Starting LangChain extraction...")
+                result = await langchain_extractor.extract(images, structured_text, metadata)
+                logger.info(f"LangChain extraction returned: {type(result)}")
+                logger.info(f"LangChain result keys: {result.keys() if result else 'None'}")
+
+                if result:
+                    logger.info("LangChain business insights extraction successful")
+                    # LangChain returns {"data": {...}, "tokens": ...}, extract the data
+                    data = result.get("data", {})
+                    logger.info(f"LangChain data keys: {data.keys() if data else 'None'}")
+                    # Structure the result to match expected format
+                    return {
+                        "information_extraction": data.get("information_extraction", {}),
+                        "strategic_analysis": data.get("strategic_analysis", {}),
+                    }
+                else:
+                    logger.warning("LangChain returned empty result")
+            except ImportError as e:
+                logger.error(f"LangChain import failed: {e}")
+                logger.error("Make sure langchain and langchain-openai are installed")
+            except Exception as e:
+                logger.error(f"LangChain extraction failed with error: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # Fallback to basic extraction (temperature 0.05 like FinForge)
+        logger.info("Using basic extraction for business insights")
+        insights_response = await self._extract_with_vision(
+            images[:5],
+            ExtractionPrompts.get_business_insights_prompt(metadata),
+            temperature=ExtractionConfig.TEMP_BUSINESS_INSIGHTS
+        )
+        return self._parse_json_response(insights_response)
+
+    async def _extract_with_vision(
+        self, images: list[bytes], prompt: str, temperature: float = 0.1
+    ) -> str:
         """Call vision LLM with images and prompt."""
         if self.provider == "openai":
-            return await self._openai_vision(images, prompt)
+            return await self._openai_vision(images, prompt, temperature)
         elif self.provider == "claude":
-            return await self._claude_vision(images, prompt)
+            return await self._claude_vision(images, prompt, temperature)
         elif self.provider == "gemini":
-            return await self._gemini_vision(images, prompt)
+            return await self._gemini_vision(images, prompt, temperature)
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
 
-    async def _openai_vision(self, images: list[bytes], prompt: str) -> str:
+    async def _openai_vision(
+        self, images: list[bytes], prompt: str, temperature: float = 0.1
+    ) -> str:
         """OpenAI GPT-4o vision API call."""
         content = [{"type": "text", "text": prompt}]
 
@@ -169,6 +313,8 @@ class DocumentExtractor:
                 }
             })
 
+        logger.debug(f"OpenAI vision call: model={self.model}, temperature={temperature}")
+
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -180,7 +326,7 @@ class DocumentExtractor:
                     "model": self.model if "gpt" in self.model else "gpt-4o",
                     "messages": [{"role": "user", "content": content}],
                     "max_tokens": 4096,
-                    "temperature": 0.1,
+                    "temperature": temperature,
                     "response_format": {"type": "json_object"}
                 }
             )
@@ -189,7 +335,9 @@ class DocumentExtractor:
 
         return data["choices"][0]["message"]["content"]
 
-    async def _claude_vision(self, images: list[bytes], prompt: str) -> str:
+    async def _claude_vision(
+        self, images: list[bytes], prompt: str, temperature: float = 0.1
+    ) -> str:
         """Anthropic Claude vision API call."""
         content = []
 
@@ -206,6 +354,8 @@ class DocumentExtractor:
 
         content.append({"type": "text", "text": prompt})
 
+        logger.debug(f"Claude vision call: model={self.model}, temperature={temperature}")
+
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 "https://api.anthropic.com/v1/messages",
@@ -217,6 +367,7 @@ class DocumentExtractor:
                 json={
                     "model": self.model if "claude" in self.model else "claude-3-5-sonnet-20241022",
                     "max_tokens": 4096,
+                    "temperature": temperature,
                     "messages": [{"role": "user", "content": content}]
                 }
             )
@@ -225,7 +376,9 @@ class DocumentExtractor:
 
         return data["content"][0]["text"]
 
-    async def _gemini_vision(self, images: list[bytes], prompt: str) -> str:
+    async def _gemini_vision(
+        self, images: list[bytes], prompt: str, temperature: float = 0.1
+    ) -> str:
         """Google Gemini vision API call."""
         parts = [{"text": prompt}]
 
@@ -238,6 +391,8 @@ class DocumentExtractor:
                 }
             })
 
+        logger.debug(f"Gemini vision call: model={self.model}, temperature={temperature}")
+
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
@@ -245,7 +400,7 @@ class DocumentExtractor:
                 json={
                     "contents": [{"parts": parts}],
                     "generationConfig": {
-                        "temperature": 0.1,
+                        "temperature": temperature,
                         "maxOutputTokens": 4096
                     }
                 }
@@ -287,6 +442,17 @@ class DocumentExtractor:
         logger.warning(f"Could not parse JSON from response: {text[:200]}...")
         return {}
 
+    def _normalize_frequency(self, frequency: str) -> str:
+        """Normalize frequency values from LLM response."""
+        freq_lower = frequency.lower().strip()
+        if freq_lower in ("annually", "annual", "yearly", "year"):
+            return "annual"
+        elif freq_lower in ("quarterly", "quarter"):
+            return "quarterly"
+        elif freq_lower in ("monthly", "month"):
+            return "monthly"
+        return "annual"  # default
+
     def _map_to_finline_schema(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Map extracted data to finLine project schema."""
         metadata = raw_data.get("metadata", {})
@@ -322,6 +488,10 @@ class DocumentExtractor:
             "financials": financials
         }
 
+        # Normalize frequency value (annually -> annual, etc.)
+        raw_frequency = metadata.get("frequency", "annual")
+        frequency = self._normalize_frequency(raw_frequency)
+
         return {
             "meta": {
                 "version": "1.0",
@@ -329,8 +499,14 @@ class DocumentExtractor:
                 "company_name": metadata.get("company_name", ""),
                 "currency": metadata.get("currency", "USD"),
                 "unit": metadata.get("unit", "millions"),
-                "frequency": metadata.get("frequency", "annual"),
+                "frequency": frequency,
                 "financial_year_end": metadata.get("financial_year_end", "December"),
+                "last_historical_period": metadata.get("last_historical_period", ""),
+                "number_of_periods_forecast": metadata.get("number_of_periods_forecast", 3),
+                "naics_sector": metadata.get("naics_sector", ""),
+                "naics_subsector": metadata.get("naics_subsector", ""),
+                "country_of_operations": metadata.get("country_of_operations", ""),
+                "country_of_headquarters": metadata.get("country_of_headquarters", ""),
             },
             "cases": {
                 "base_case": case_data

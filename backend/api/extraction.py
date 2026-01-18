@@ -305,6 +305,12 @@ async def merge_extraction(
                     if not project_data["meta"].get(key):
                         project_data["meta"][key] = value
 
+    # CRITICAL: Save insights_data from extraction for Business Intelligence
+    insights_data = extraction.get("insights_data")
+    if insights_data:
+        project_data["insights_data"] = insights_data
+        logger.info(f"Saved insights_data to project {project_id}")
+
     # Save updated project
     await db_update_project(project_id, project_data)
 

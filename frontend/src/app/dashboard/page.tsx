@@ -4,15 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ProjectListItem } from "@/lib/api";
-import { Plus, Folder, LogOut, Settings } from "lucide-react";
+import { Plus, Folder, LogOut, Settings, Trash2 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, set_projects] = useState<ProjectListItem[]>([]);
   const [loading, set_loading] = useState(true);
-  const [creating, set_creating] = useState(false);
-  const [new_project_name, set_new_project_name] = useState("");
-  const [show_create_modal, set_show_create_modal] = useState(false);
+  const [deleting_id, set_deleting_id] = useState<string | null>(null);
 
   useEffect(() => {
     load_projects();
@@ -32,18 +30,26 @@ export default function DashboardPage() {
     }
   };
 
-  const handle_create_project = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!new_project_name.trim()) return;
+  const handle_new_project = () => {
+    router.push("/project-wizard/type");
+  };
 
-    set_creating(true);
+  const handle_delete_project = async (e: React.MouseEvent, project_id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!confirm("Are you sure you want to delete this project?")) {
+      return;
+    }
+
+    set_deleting_id(project_id);
     try {
-      const project = await api.create_project(new_project_name.trim());
-      router.push(`/project/${project.id}`);
+      await api.delete_project(project_id);
+      set_projects(projects.filter(p => p.id !== project_id));
     } catch (err) {
-      console.error("Failed to create project:", err);
+      console.error("Failed to delete project:", err);
     } finally {
-      set_creating(false);
+      set_deleting_id(null);
     }
   };
 
@@ -93,7 +99,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold">Your Projects</h1>
           <button
-            onClick={() => set_show_create_modal(true)}
+            onClick={handle_new_project}
             className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
@@ -109,7 +115,7 @@ export default function DashboardPage() {
               Create your first LBO model to get started.
             </p>
             <button
-              onClick={() => set_show_create_modal(true)}
+              onClick={handle_new_project}
               className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90"
             >
               Create Project
@@ -121,53 +127,26 @@ export default function DashboardPage() {
               <Link
                 key={project.id}
                 href={`/project/${project.id}`}
-                className="bg-card p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                className="bg-card p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow relative group"
               >
                 <h3 className="font-medium mb-2">{project.name}</h3>
                 <p className="text-sm text-muted-foreground">
                   Updated{" "}
                   {new Date(project.updated_at).toLocaleDateString()}
                 </p>
+                <button
+                  onClick={(e) => handle_delete_project(e, project.id)}
+                  disabled={deleting_id === project.id}
+                  className="absolute top-4 right-4 p-2 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                  title="Delete project"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </Link>
             ))}
           </div>
         )}
       </main>
-
-      {/* Create Modal */}
-      {show_create_modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card p-6 rounded-lg shadow-lg w-full max-w-md">
-            <h2 className="text-lg font-bold mb-4">Create New Project</h2>
-            <form onSubmit={handle_create_project}>
-              <input
-                type="text"
-                value={new_project_name}
-                onChange={(e) => set_new_project_name(e.target.value)}
-                placeholder="Project name"
-                className="w-full px-3 py-2 border rounded-md bg-background mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => set_show_create_modal(false)}
-                  className="px-4 py-2 rounded-md hover:bg-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !new_project_name.trim()}
-                  className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {creating ? "Creating..." : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

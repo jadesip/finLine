@@ -703,16 +703,3 @@ User Input
 | Data Storage | JSON files + locking | SQLite with ACID |
 | Wizard | 15 steps | None (modal + direct edit) |
 
----
-
-## Next Steps
-
-1. **Review this architecture** - any changes needed?
-2. **Set up project skeleton** - folder structure, configs
-3. **Implement auth** - port from finForge
-4. **Build database layer** - SQLite + models
-5. **Create basic API** - CRUD for projects
-6. **Build frontend shell** - pages, routing, UI components
-7. **Implement features** - financial table, chat, analysis
-
-Ready to start coding when you approve this architecture.

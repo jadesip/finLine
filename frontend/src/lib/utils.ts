@@ -64,3 +64,46 @@ export function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }
+
+/**
+ * Set a nested value in an object using dot notation path
+ */
+export function set_nested_value<T extends Record<string, any>>(
+  obj: T,
+  path: string,
+  value: any
+): T {
+  const keys = path.split(".");
+  const result = { ...obj };
+  let current: any = result;
+
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    current[key] = current[key] ? { ...current[key] } : {};
+    current = current[key];
+  }
+
+  current[keys[keys.length - 1]] = value;
+  return result;
+}
+
+/**
+ * Get a nested value from an object using dot notation path
+ */
+export function get_nested_value<T = any>(
+  obj: Record<string, any>,
+  path: string,
+  default_value?: T
+): T | undefined {
+  const keys = path.split(".");
+  let current: any = obj;
+
+  for (const key of keys) {
+    if (current === null || current === undefined) {
+      return default_value;
+    }
+    current = current[key];
+  }
+
+  return current ?? default_value;
+}
