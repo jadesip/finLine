@@ -2,6 +2,9 @@
 
 > A simplified financial modeling platform - rebuilt from finForge learnings
 
+**Status:** Mid-Implementation (Wizard flow complete, LBO engine pending)
+**Last Updated:** 2026-01-19
+
 ---
 
 ## Overview
@@ -427,7 +430,14 @@ finLine/
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── llm.py           # LLM abstraction (Gemini/Claude/etc)
-│   │   ├── extraction.py    # Document extraction logic
+│   │   ├── extraction/      # Document extraction module
+│   │   │   ├── extractor.py           # Main orchestrator
+│   │   │   ├── file_handler.py        # PDF/image processing
+│   │   │   ├── text_extractor.py      # Hybrid text extraction (PyMuPDF)
+│   │   │   ├── image_optimizer.py     # Image optimization for LLM
+│   │   │   ├── prompts.py             # Extraction prompts
+│   │   │   ├── langchain_business_insights.py  # LangChain for insights
+│   │   │   └── models.py              # Extraction data models
 │   │   ├── insights.py      # Perplexity integration
 │   │   └── excel.py         # Excel export
 │   │
@@ -688,7 +698,74 @@ User Input
 
 ---
 
-## 8. Key Simplifications Summary
+## 8. Document Extraction Architecture
+
+### Hybrid Text+Image Extraction
+
+finLine uses hybrid extraction (ported from FinForge) for accurate financial data parsing:
+
+```
+PDF Upload
+    │
+    ▼
+┌─────────────────────┐
+│  FileHandler        │
+│  - Convert to images│
+│  - Extract text     │ ← PyMuPDF text extraction
+│  - Analyze doc type │
+└────────┬────────────┘
+         │
+         ▼
+    ┌────────────┐
+    │ Has text?  │
+    └────┬───────┘
+         │
+    Yes ─┴── No
+    │         │
+    ▼         ▼
+┌────────────┐  ┌────────────┐
+│ Hybrid     │  │ Image-only │
+│ Prompt     │  │ Prompt     │
+│ (text+img) │  │            │
+└────────────┘  └────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Vision LLM (GPT-4o)│
+│  - Metadata extract │
+│  - Financial data   │
+│  - Business insights│
+└─────────────────────┘
+```
+
+**Why Hybrid Extraction?**
+
+Image-only extraction caused the LLM to visually misinterpret numbers like "282,836" as "282.836" (European decimal format). By extracting actual text from PDFs using PyMuPDF and including it in the prompt, the LLM correctly parses comma-separated thousands.
+
+### Configuration
+
+```python
+# config.py - ExtractionConfig
+USE_HYBRID_TEXT_IMAGE: bool = True    # Enable text+image extraction
+USE_LANGCHAIN_BUSINESS_INSIGHTS: bool = True  # LangChain for insights
+TEXT_QUALITY_THRESHOLD: float = 0.7   # Min quality for text extraction
+
+# Temperature settings (match FinForge exactly)
+TEMP_METADATA: float = 0.1
+TEMP_FINANCIAL_DATA: float = 0.1
+TEMP_BUSINESS_INSIGHTS: float = 0.05
+```
+
+### Business Insights Extraction
+
+Uses LangChain with structured prompts for:
+- Information extraction (business description, revenue model, management)
+- Strategic analysis (SWOT, risks, industry context)
+- Perplexity integration for market research
+
+---
+
+## 9. Key Simplifications Summary
 
 | Aspect | finForge | finLine |
 |--------|----------|---------|

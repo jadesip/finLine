@@ -2,8 +2,8 @@
 
 > Migration from finForge to a simplified, maintainable financial modeling platform
 
-**Status:** Implementation Complete
-**Last Updated:** 2026-01-17
+**Status:** Mid-Implementation (Wizard flow complete, LBO engine & core pages pending)
+**Last Updated:** 2026-01-19
 
 ---
 
@@ -74,6 +74,10 @@ A simplified LBO financial modeling platform addressing pain points from finForg
 - LLM abstraction layer - OpenAI/Claude/Gemini provider switch
 - Chat endpoint with intent parsing
 - Document extraction - PDF/image processing
+  - **Hybrid text+image extraction** (ported from FinForge 2026-01-19)
+  - Fixed /1000 bug: LLM misread "282,836" as "282.836" with image-only
+  - PyMuPDF text extraction + vision LLM for accurate number parsing
+- LangChain integration for business insights extraction
 - Perplexity insights integration
 
 ### Phase 5: Export & Payments ✅
@@ -176,3 +180,54 @@ pytest tests/ -v
 | LLM | OpenAI / Claude / Gemini (configurable) |
 | Payments | Stripe |
 | Testing | pytest (backend) |
+
+---
+
+## Remaining Work
+
+The wizard flow (Dashboard → Type → Name → Upload → Company → Financials → Insights) is complete. The following major items remain:
+
+### Phase 8: Core LBO Pages (Priority: High)
+
+| # | Task | Description | Complexity |
+|---|------|-------------|------------|
+| 1 | **Forecast Builder Page** | Complex financial projections with linked formulas. Must ensure integrity between income statement, balance sheet, and cash flow. Support multiple cases (base, upside, downside). | High |
+| 2 | **Transaction Parameters Page** | Deal date, exit date, entry/exit valuation methods, multiples, fees, tax rate. | Medium |
+| 3 | **Capital Structure Page** | Debt tranche configuration: term loans, revolvers, mezzanine, PIK, amortization schedules, covenants. | High |
+| 4 | **Re-import LBO Engine** | Port and integrate the full LBO calculation engine from FinForge. IRR, MOIC, debt schedules, cash sweeps. | High |
+| 5 | **Results/Summary Page** | Returns dashboard, sensitivity tables, charts, key metrics. | Medium |
+
+### Phase 9: Export & Payments (Priority: Medium)
+
+| # | Task | Description |
+|---|------|-------------|
+| 6 | **Excel Export Template** | Create new Excel template with proper formatting, formulas, and wire extraction data into template. |
+| 7 | **Stripe Integration** | Set up payment flows, subscription management, customer portal, webhooks. |
+
+### Phase 10: Infrastructure (Priority: Medium)
+
+| # | Task | Description |
+|---|------|-------------|
+| 8 | **Data Persistence** | Ensure users can return and find their LBO cases. Session management, auto-save. |
+| 9 | **Analytics Page** | Usage metrics, model statistics, user activity tracking. |
+| 10 | **Testing** | End-to-end testing at every step. Unit tests, integration tests. |
+| 11 | **CI/CD & Docker** | GitHub Actions pipeline, Dockerize frontend and backend, docker-compose for local dev. |
+
+### Phase 11: Deployment (Priority: High)
+
+| # | Task | Description |
+|---|------|-------------|
+| 12 | **Deployment Options** | Evaluate alternatives to current expensive stack (Vercel + Render). Consider: Railway, Fly.io, self-hosted VPS, Coolify. |
+| 13 | **Deploy to finline.app** | Replace current FinForge deployment with finLine. DNS migration, SSL, monitoring. |
+| 14 | **Marketing Plan** | Launch strategy, landing page copy, pricing tiers, user acquisition channels. |
+
+### Estimated Timeline
+
+| Phase | Duration | Dependencies |
+|-------|----------|--------------|
+| Phase 8 (Core LBO) | 3-4 weeks | None |
+| Phase 9 (Export/Payments) | 1-2 weeks | Phase 8 |
+| Phase 10 (Infrastructure) | 1-2 weeks | Parallel with Phase 9 |
+| Phase 11 (Deployment) | 1 week | Phase 8-10 complete |
+
+**Total remaining: ~6-9 weeks**

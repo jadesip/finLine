@@ -2,11 +2,15 @@
 
 A simplified LBO financial modeling platform with AI-powered features.
 
+**Status:** Mid-Implementation | [See Implementation Plan](IMPLEMENTATION_PLAN.md)
+
 ## Features
 
 - **LBO Analysis Engine** - IRR, MOIC, debt schedules, cash flow projections
 - **AI Chat Assistant** - Natural language model updates ("Set EBITDA to 100M for 2024")
 - **Document Extraction** - Extract financials from PDFs and images
+  - Hybrid text+image extraction for accurate number parsing
+  - LangChain-powered business insights
 - **Excel Export** - Full model export with formulas
 - **Multiple Cases** - Base, upside, downside scenarios
 - **Full Debt Modeling** - Term loans, revolvers, PIK, amortization schedules
