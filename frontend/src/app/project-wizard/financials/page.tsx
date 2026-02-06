@@ -61,7 +61,7 @@ export default function FinancialsPage() {
     const ebitda = financials.income_statement?.ebitda;
     if (Array.isArray(ebitda) && ebitda[0]) {
       const origin = ebitda[0].origin;
-      if (origin === "sourced" || origin === "source") {
+      if (origin === "sourced") {
         return "from source documents";
       } else if (origin === "calculated") {
         return "calculated from D&A + EBIT";

@@ -453,11 +453,76 @@ class DocumentExtractor:
             return "monthly"
         return "annual"  # default
 
+    def _normalize_financials(self, financials: dict[str, Any]) -> dict[str, Any]:
+        """
+        Normalize financial data after extraction.
+
+        Handles:
+        1. Field name normalization: d&a → d_and_a
+        2. D&A deduplication: keep only in income_statement
+        3. Remove empty placeholders
+        """
+        if not financials:
+            return financials
+
+        income_stmt = financials.get("income_statement", {})
+        cash_flow_stmt = financials.get("cash_flow_statement", {})
+
+        # Step 1: Normalize d&a → d_and_a in income statement
+        d_and_a_data = None
+
+        # Check income_statement for d&a (LLM output) or d_and_a
+        if "d&a" in income_stmt and income_stmt["d&a"]:
+            d_and_a_data = income_stmt.pop("d&a")
+            logger.debug("Found D&A in income_statement as 'd&a'")
+        elif "d_and_a" in income_stmt and income_stmt["d_and_a"]:
+            # Already normalized and has data
+            d_and_a_data = income_stmt["d_and_a"]
+            logger.debug("Found D&A in income_statement as 'd_and_a'")
+
+        # Step 2: If no D&A in income statement, check cash flow statement
+        if not d_and_a_data:
+            if "d&a" in cash_flow_stmt and cash_flow_stmt["d&a"]:
+                d_and_a_data = cash_flow_stmt.pop("d&a")
+                logger.info("Moved D&A from cash_flow_statement to income_statement")
+            elif "d_and_a" in cash_flow_stmt and cash_flow_stmt["d_and_a"]:
+                d_and_a_data = cash_flow_stmt.pop("d_and_a")
+                logger.info("Moved D&A from cash_flow_statement to income_statement")
+        else:
+            # D&A exists in income statement, remove duplicate from cash flow
+            if "d&a" in cash_flow_stmt:
+                cash_flow_stmt.pop("d&a")
+                logger.debug("Removed duplicate D&A from cash_flow_statement")
+            if "d_and_a" in cash_flow_stmt:
+                cash_flow_stmt.pop("d_and_a")
+                logger.debug("Removed duplicate d_and_a from cash_flow_statement")
+
+        # Step 3: Set normalized d_and_a in income statement
+        if d_and_a_data:
+            income_stmt["d_and_a"] = d_and_a_data
+        elif "d_and_a" in income_stmt and not income_stmt["d_and_a"]:
+            # Remove empty placeholder
+            del income_stmt["d_and_a"]
+
+        # Step 4: Remove any remaining empty d&a fields
+        if "d&a" in income_stmt and not income_stmt["d&a"]:
+            del income_stmt["d&a"]
+
+        financials["income_statement"] = income_stmt
+        financials["cash_flow_statement"] = cash_flow_stmt
+
+        logger.info(f"Normalized financials - D&A in income_statement: {'d_and_a' in income_stmt and bool(income_stmt.get('d_and_a'))}")
+
+        return financials
+
     def _map_to_finline_schema(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Map extracted data to finLine project schema."""
         metadata = raw_data.get("metadata", {})
         financials = raw_data.get("financials", {})
         deal_params = raw_data.get("deal_parameters", {})
+
+        # Normalize financials (d&a → d_and_a, deduplicate, etc.)
+        financials = self._normalize_financials(financials)
 
         # Build finLine case structure
         case_data = {

@@ -74,7 +74,7 @@ def create_access_token(user_id: str, email: str) -> str:
 
 def create_refresh_token(user_id: str) -> str:
     """Create a JWT refresh token."""
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    expire = datetime.now(timezone.utc) + timedelta(hours=settings.refresh_token_expire_hours)
     payload = {
         "sub": user_id,
         "exp": expire,

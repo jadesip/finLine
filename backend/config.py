@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    refresh_token_expire_days: int = 7
+    refresh_token_expire_hours: int = 12
 
     # LLM Configuration - MUST match FinForge for consistent results
     llm_provider: str = os.getenv("LLM_PROVIDER", "openai")  # gemini, claude, openai

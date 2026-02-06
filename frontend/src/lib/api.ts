@@ -381,12 +381,113 @@ export class ApiError extends Error {
 // Helper Functions
 // ============================================================
 
+// Flag to prevent infinite refresh loops
+let is_refreshing = false;
+let refresh_promise: Promise<boolean> | null = null;
+
 function get_auth_header(): Record<string, string> {
   const token = localStorage.getItem("access_token");
   if (token) {
     return { Authorization: `Bearer ${token}` };
   }
   return {};
+}
+
+/**
+ * Attempt to refresh the access token using the refresh token.
+ * Returns true if successful, false otherwise.
+ */
+async function refresh_tokens(): Promise<boolean> {
+  const refresh_token = localStorage.getItem("refresh_token");
+  if (!refresh_token) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+
+    if (!response.ok) {
+      // Refresh failed - clear tokens and redirect to login
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      return false;
+    }
+
+    const tokens: Token = await response.json();
+    localStorage.setItem("access_token", tokens.access_token);
+    localStorage.setItem("refresh_token", tokens.refresh_token);
+    console.log("[Auth] Token refreshed successfully");
+    return true;
+  } catch (error) {
+    console.error("[Auth] Token refresh failed:", error);
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    return false;
+  }
+}
+
+/**
+ * Handle token refresh with deduplication.
+ * Multiple concurrent 401s will share the same refresh attempt.
+ */
+async function handle_token_refresh(): Promise<boolean> {
+  if (is_refreshing && refresh_promise) {
+    // Another refresh is in progress, wait for it
+    return refresh_promise;
+  }
+
+  is_refreshing = true;
+  refresh_promise = refresh_tokens();
+
+  try {
+    const result = await refresh_promise;
+    return result;
+  } finally {
+    is_refreshing = false;
+    refresh_promise = null;
+  }
+}
+
+/**
+ * Make an authenticated fetch request with automatic token refresh.
+ */
+async function auth_fetch(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  // Add auth header
+  const headers = {
+    ...options.headers,
+    ...get_auth_header(),
+  };
+
+  let response = await fetch(url, { ...options, headers });
+
+  // If 401, try to refresh and retry once
+  if (response.status === 401) {
+    console.log("[Auth] Got 401, attempting token refresh...");
+    const refreshed = await handle_token_refresh();
+
+    if (refreshed) {
+      // Retry with new token
+      const new_headers = {
+        ...options.headers,
+        ...get_auth_header(),
+      };
+      response = await fetch(url, { ...options, headers: new_headers });
+    } else {
+      // Refresh failed, redirect to login
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    }
+  }
+
+  return response;
 }
 
 async function handle_response<T>(response: Response): Promise<T> {
@@ -432,17 +533,13 @@ export const api = {
   },
 
   async get_me(): Promise<UserResponse> {
-    const response = await fetch(`${API_URL}/api/auth/me`, {
-      headers: get_auth_header(),
-    });
+    const response = await auth_fetch(`${API_URL}/api/auth/me`);
     return handle_response(response);
   },
 
   // Projects
   async list_projects(): Promise<ProjectListItem[]> {
-    const response = await fetch(`${API_URL}/api/projects`, {
-      headers: get_auth_header(),
-    });
+    const response = await auth_fetch(`${API_URL}/api/projects`);
     return handle_response(response);
   },
 
@@ -452,21 +549,16 @@ export const api = {
     currency?: string,
     unit?: string
   ): Promise<ProjectResponse> {
-    const response = await fetch(`${API_URL}/api/projects`, {
+    const response = await auth_fetch(`${API_URL}/api/projects`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, company_name, currency, unit }),
     });
     return handle_response(response);
   },
 
   async get_project(project_id: string): Promise<ProjectResponse> {
-    const response = await fetch(`${API_URL}/api/projects/${project_id}`, {
-      headers: get_auth_header(),
-    });
+    const response = await auth_fetch(`${API_URL}/api/projects/${project_id}`);
     return handle_response(response);
   },
 
@@ -475,12 +567,9 @@ export const api = {
     path: string,
     value: any
   ): Promise<ProjectResponse> {
-    const response = await fetch(`${API_URL}/api/projects/${project_id}`, {
+    const response = await auth_fetch(`${API_URL}/api/projects/${project_id}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, value }),
     });
     return handle_response(response);
@@ -490,21 +579,17 @@ export const api = {
     project_id: string,
     updates: Array<{ path: string; value: any }>
   ): Promise<ProjectResponse> {
-    const response = await fetch(`${API_URL}/api/projects/${project_id}/bulk`, {
+    const response = await auth_fetch(`${API_URL}/api/projects/${project_id}/bulk`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ updates }),
     });
     return handle_response(response);
   },
 
   async delete_project(project_id: string): Promise<void> {
-    const response = await fetch(`${API_URL}/api/projects/${project_id}`, {
+    const response = await auth_fetch(`${API_URL}/api/projects/${project_id}`, {
       method: "DELETE",
-      headers: get_auth_header(),
     });
     if (!response.ok) {
       throw new ApiError(response.status, "Failed to delete project");
@@ -512,12 +597,9 @@ export const api = {
   },
 
   async add_case(project_id: string, case_id: string): Promise<ProjectResponse> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/cases/${case_id}`,
-      {
-        method: "POST",
-        headers: get_auth_header(),
-      }
+      { method: "POST" }
     );
     return handle_response(response);
   },
@@ -526,12 +608,9 @@ export const api = {
     project_id: string,
     case_id: string
   ): Promise<ProjectResponse> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/cases/${case_id}`,
-      {
-        method: "DELETE",
-        headers: get_auth_header(),
-      }
+      { method: "DELETE" }
     );
     return handle_response(response);
   },
@@ -541,23 +620,17 @@ export const api = {
     project_id: string,
     case_id: string = "base_case"
   ): Promise<AnalysisResult> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/analyze?case_id=${encodeURIComponent(case_id)}`,
-      {
-        method: "POST",
-        headers: get_auth_header(),
-      }
+      { method: "POST" }
     );
     return handle_response(response);
   },
 
   async analyze_all(project_id: string): Promise<AllCasesAnalysisResult> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/analyze/all`,
-      {
-        method: "POST",
-        headers: get_auth_header(),
-      }
+      { method: "POST" }
     );
     return handle_response(response);
   },
@@ -567,12 +640,9 @@ export const api = {
     project_id: string,
     case_id: string = "base_case"
   ): Promise<Blob> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/export?case_id=${encodeURIComponent(case_id)}`,
-      {
-        method: "POST",
-        headers: get_auth_header(),
-      }
+      { method: "POST" }
     );
     if (!response.ok) {
       let detail = "Export failed";
@@ -594,12 +664,9 @@ export const api = {
     case_id: string = "base_case",
     auto_apply: boolean = false
   ): Promise<ChatResponse> {
-    const response = await fetch(`${API_URL}/api/projects/${project_id}/chat`, {
+    const response = await auth_fetch(`${API_URL}/api/projects/${project_id}/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, case_id, auto_apply }),
     });
     return handle_response(response);
@@ -610,14 +677,11 @@ export const api = {
     updates: ChatUpdate[],
     case_id: string = "base_case"
   ): Promise<ChatResponse> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/chat/apply?case_id=${encodeURIComponent(case_id)}`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...get_auth_header(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       }
     );
@@ -626,19 +690,14 @@ export const api = {
 
   // Payments
   async get_subscription(): Promise<SubscriptionResponse> {
-    const response = await fetch(`${API_URL}/api/payments/subscription`, {
-      headers: get_auth_header(),
-    });
+    const response = await auth_fetch(`${API_URL}/api/payments/subscription`);
     return handle_response(response);
   },
 
   async create_checkout(price_id: string): Promise<CheckoutResponse> {
-    const response = await fetch(`${API_URL}/api/payments/create-checkout`, {
+    const response = await auth_fetch(`${API_URL}/api/payments/create-checkout`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         price_id,
         success_url: `${window.location.origin}/settings?payment=success`,
@@ -649,12 +708,9 @@ export const api = {
   },
 
   async create_portal(): Promise<PortalResponse> {
-    const response = await fetch(`${API_URL}/api/payments/portal`, {
+    const response = await auth_fetch(`${API_URL}/api/payments/portal`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...get_auth_header(),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         return_url: `${window.location.origin}/settings`,
       }),
@@ -671,11 +727,10 @@ export const api = {
     form_data.append("file", file);
     form_data.append("extract_immediately", "true");
 
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/extract`,
       {
         method: "POST",
-        headers: get_auth_header(),
         body: form_data,
       }
     );
@@ -686,11 +741,8 @@ export const api = {
     project_id: string,
     extraction_id: string
   ): Promise<ExtractionStatusResponse> {
-    const response = await fetch(
-      `${API_URL}/api/projects/${project_id}/extractions/${extraction_id}`,
-      {
-        headers: get_auth_header(),
-      }
+    const response = await auth_fetch(
+      `${API_URL}/api/projects/${project_id}/extractions/${extraction_id}`
     );
     return handle_response(response);
   },
@@ -700,14 +752,11 @@ export const api = {
     extraction_id: string,
     strategy: "overlay" | "replace" | "manual" = "overlay"
   ): Promise<{ status: string; message: string }> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/extractions/${extraction_id}/merge`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...get_auth_header(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ merge_strategy: strategy }),
       }
     );
@@ -719,14 +768,11 @@ export const api = {
     project_id: string,
     topics: string[] = ["industry", "competitors", "market_trends", "risks"]
   ): Promise<InsightsData | null> {
-    const response = await fetch(
+    const response = await auth_fetch(
       `${API_URL}/api/projects/${project_id}/insights`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...get_auth_header(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topics }),
       }
     );
@@ -737,11 +783,8 @@ export const api = {
   },
 
   async get_quick_insights(project_id: string): Promise<any> {
-    const response = await fetch(
-      `${API_URL}/api/projects/${project_id}/insights/quick`,
-      {
-        headers: get_auth_header(),
-      }
+    const response = await auth_fetch(
+      `${API_URL}/api/projects/${project_id}/insights/quick`
     );
     return handle_response(response);
   },
