@@ -78,12 +78,11 @@ export default function InsightsPage() {
     : 0;
 
   const handle_continue = () => {
-    // For now, go to dashboard since we haven't built the rest of the wizard
-    router.push("/dashboard");
+    router.push(`/project-wizard/forecast?id=${state.project_id}`);
   };
 
   const handle_skip = () => {
-    router.push("/dashboard");
+    router.push(`/project-wizard/forecast?id=${state.project_id}`);
   };
 
   if (is_loading) {

@@ -7,7 +7,11 @@ export type WizardStepId =
   | "upload"
   | "company"
   | "financials"
-  | "insights";
+  | "insights"
+  | "forecast"
+  | "deal_assumptions"
+  | "capital_structure"
+  | "results";
 
 export interface WizardStep {
   id: WizardStepId;
@@ -52,6 +56,30 @@ export const WIZARD_STEPS: WizardStep[] = [
     title: "Insights",
     description: "Business intelligence",
     path: "/project-wizard/insights",
+  },
+  {
+    id: "forecast",
+    title: "Forecast",
+    description: "Financial projections",
+    path: "/project-wizard/forecast",
+  },
+  {
+    id: "deal_assumptions",
+    title: "Deal",
+    description: "Entry and exit parameters",
+    path: "/project-wizard/deal-assumptions",
+  },
+  {
+    id: "capital_structure",
+    title: "Capital",
+    description: "Debt and equity structure",
+    path: "/project-wizard/capital-structure",
+  },
+  {
+    id: "results",
+    title: "Results",
+    description: "Transaction dashboard",
+    path: "/project-wizard/results",
   },
 ];
 

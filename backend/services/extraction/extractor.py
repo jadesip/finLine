@@ -460,7 +460,8 @@ class DocumentExtractor:
         Handles:
         1. Field name normalization: d&a → d_and_a
         2. D&A deduplication: keep only in income_statement
-        3. Remove empty placeholders
+        3. EBIT normalization: income_from_operations/operating_income → ebit
+        4. Remove empty placeholders
         """
         if not financials:
             return financials
@@ -468,7 +469,9 @@ class DocumentExtractor:
         income_stmt = financials.get("income_statement", {})
         cash_flow_stmt = financials.get("cash_flow_statement", {})
 
-        # Step 1: Normalize d&a → d_and_a in income statement
+        # ============================================================
+        # D&A Normalization
+        # ============================================================
         d_and_a_data = None
 
         # Check income_statement for d&a (LLM output) or d_and_a
@@ -480,7 +483,7 @@ class DocumentExtractor:
             d_and_a_data = income_stmt["d_and_a"]
             logger.debug("Found D&A in income_statement as 'd_and_a'")
 
-        # Step 2: If no D&A in income statement, check cash flow statement
+        # If no D&A in income statement, check cash flow statement
         if not d_and_a_data:
             if "d&a" in cash_flow_stmt and cash_flow_stmt["d&a"]:
                 d_and_a_data = cash_flow_stmt.pop("d&a")
@@ -497,21 +500,75 @@ class DocumentExtractor:
                 cash_flow_stmt.pop("d_and_a")
                 logger.debug("Removed duplicate d_and_a from cash_flow_statement")
 
-        # Step 3: Set normalized d_and_a in income statement
+        # Set normalized d_and_a in income statement
         if d_and_a_data:
             income_stmt["d_and_a"] = d_and_a_data
         elif "d_and_a" in income_stmt and not income_stmt["d_and_a"]:
             # Remove empty placeholder
             del income_stmt["d_and_a"]
 
-        # Step 4: Remove any remaining empty d&a fields
+        # Remove any remaining empty d&a fields
         if "d&a" in income_stmt and not income_stmt["d&a"]:
             del income_stmt["d&a"]
 
+        # ============================================================
+        # EBIT Normalization
+        # operating_income / income_from_operations → ebit
+        # ============================================================
+
+        # Helper to check if a field has actual data (not empty list/dict/None)
+        def has_data(value: Any) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, (list, dict)) and not value:
+                return False
+            return True
+
+        ebit_data = None
+        ebit_source = None
+
+        # Check if ebit already has data
+        if "ebit" in income_stmt and has_data(income_stmt["ebit"]):
+            ebit_data = income_stmt["ebit"]
+            ebit_source = "ebit"
+            logger.debug("Found EBIT in income_statement as 'ebit'")
+
+        # If ebit is empty or missing, check alternative field names
+        if not ebit_data:
+            # List of alternative names for EBIT (operating income)
+            ebit_aliases = [
+                "income_from_operations",
+                "operating_income",
+                "operating_profit",
+                "operating_earnings",
+            ]
+
+            for alias in ebit_aliases:
+                if alias in income_stmt and has_data(income_stmt[alias]):
+                    ebit_data = income_stmt.pop(alias)
+                    ebit_source = alias
+                    logger.info(f"Normalized EBIT: moved '{alias}' to 'ebit'")
+                    break
+
+        # Set normalized ebit in income statement
+        if ebit_data:
+            income_stmt["ebit"] = ebit_data
+        elif "ebit" in income_stmt and not has_data(income_stmt["ebit"]):
+            # Remove empty placeholder
+            del income_stmt["ebit"]
+
+        # Remove any remaining empty alternative fields
+        for alias in ["income_from_operations", "operating_income", "operating_profit", "operating_earnings"]:
+            if alias in income_stmt and not has_data(income_stmt[alias]):
+                del income_stmt[alias]
+
+        # ============================================================
+        # Finalize
+        # ============================================================
         financials["income_statement"] = income_stmt
         financials["cash_flow_statement"] = cash_flow_stmt
 
-        logger.info(f"Normalized financials - D&A in income_statement: {'d_and_a' in income_stmt and bool(income_stmt.get('d_and_a'))}")
+        logger.info(f"Normalized financials - D&A: {'d_and_a' in income_stmt and has_data(income_stmt.get('d_and_a'))}, EBIT: {'ebit' in income_stmt and has_data(income_stmt.get('ebit'))} (source: {ebit_source or 'none'})")
 
         return financials
 
