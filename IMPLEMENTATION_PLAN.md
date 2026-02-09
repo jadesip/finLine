@@ -2,8 +2,8 @@
 
 > Migration from finForge to a simplified, maintainable financial modeling platform
 
-**Status:** Mid-Implementation (Wizard flow complete, LBO engine & core pages pending)
-**Last Updated:** 2026-01-19
+**Status:** Phase 8 UI Complete - Business Logic Pending
+**Last Updated:** 2026-02-09
 
 ---
 
@@ -21,8 +21,8 @@ A simplified LBO financial modeling platform addressing pain points from finForg
 | P&L format detection (A1.1-B2.5 cases) | No detection - user provides EBITDA |
 | Mixed naming conventions (snake_case/camelCase) | snake_case everywhere |
 | JSON file storage with concurrency issues | SQLite with ACID transactions |
-| Complex multi-step wizard (15 steps) | Simple modal + direct editing |
-| Multiple Zustand stores | React Query for state management |
+| Complex multi-step wizard (15 steps) | 10-step focused wizard |
+| Multiple Zustand stores | React Context for state management |
 
 ### Features Implemented
 
@@ -32,10 +32,11 @@ A simplified LBO financial modeling platform addressing pain points from finForg
 - EBITDA dual entry (sourced vs calculated from EBIT + D&A)
 - Multiple case scenarios (base, upside, downside)
 - Document extraction with AI (PDF/image processing)
-- Auth system (JWT + bcrypt)
+- Auth system (JWT + bcrypt with auto-refresh)
 - Chat interface for natural language updates
 - Excel export with formulas
 - Stripe payment integration
+- **10-step wizard flow with full UI**
 
 ---
 
@@ -79,6 +80,7 @@ A simplified LBO financial modeling platform addressing pain points from finForg
   - PyMuPDF text extraction + vision LLM for accurate number parsing
 - LangChain integration for business insights extraction
 - Perplexity insights integration
+- **EBIT normalization** - maps income_from_operations, operating_income → ebit
 
 ### Phase 5: Export & Payments ✅
 
@@ -86,27 +88,51 @@ A simplified LBO financial modeling platform addressing pain points from finForg
 - Stripe integration - checkout, subscription, portal
 - Payment webhooks
 
-### Phase 6: Frontend ✅
+### Phase 6: Frontend Foundation ✅
 
 - Next.js 14 + React 18 + TypeScript
 - Landing page with auth
 - Dashboard with project list
-- Project page with tabs (Financials, Deal, Debt, Results)
-- Editable financial tables
-- Debt tranche editor
-- Chat panel with apply/cancel
-- Settings page (Account, Billing, Security)
+- shadcn/ui component library
+- Wizard context for state management
 - API client with full type definitions
+- JWT auto-refresh mechanism
 
-### Phase 7: Testing & Polish ✅
+### Phase 7: Wizard Flow (Steps 1-6) ✅
 
-- Backend pytest test suite (30 tests)
-  - test_auth.py - registration, login, token validation
-  - test_projects.py - CRUD, updates, case management
-  - test_analysis.py - LBO calculations, export
-- All tests passing
-- Error handling throughout
-- Type safety with TypeScript
+- **Type Selection** - Project type cards (LBO enabled, others disabled)
+- **Name** - Project name input with create
+- **Upload** - Drag-drop file upload with extraction progress
+- **Company Info** - Metadata review and editing
+- **Financials Review** - Editable table with validation checkboxes
+- **Business Intelligence** - 5 tabs (Overview, Business Model, Management, Strategy & SWOT, Risk Analysis)
+
+### Phase 8: LBO Wizard Pages (Steps 7-10) ✅ UI COMPLETE
+
+- **Forecast Page** ✅ - Navigation bridge to deal assumptions
+- **Deal Assumptions Page** ✅
+  - Entry/exit parameters with MonthYearPicker
+  - MultipleInput component (shows "7.0x" format)
+  - PercentageInput component (shows "2%" format, no spinners)
+  - Entry and Exit Valuation Multiples tables
+  - Case selector (Base/Upside/Downside)
+- **Capital Structure Page** ✅
+  - Debt tranches list with add/remove
+  - Tranche configuration (type, size, rates, PIK, amortization, maturity, seniority)
+  - Blue info bar: "Fill in the various debt tranches of the financing package"
+  - Reference rate curve (SOFR) with enable toggle
+  - Other Assumptions (tax rate, minimum cash)
+  - Sources & Uses summary with balance check
+  - Red alert shown only when not balanced
+- **Results Page** ✅
+  - Executive Summary table (IRR, MOIC, key metrics)
+  - Sources & Uses side-by-side cards
+  - Returns Waterfall with collapsible entry/exit details
+  - Forecast & Cash Flows table
+  - Credit Ratios table
+  - Case selector
+
+**Note:** All Phase 8 pages are UI-only (hardcoded sample data). Business logic to connect to backend pending.
 
 ---
 
@@ -144,6 +170,62 @@ A simplified LBO financial modeling platform addressing pain points from finForg
 
 ---
 
+## Wizard Steps (10 total)
+
+| # | Step ID | Page | Status |
+|---|---------|------|--------|
+| 1 | type | Project Type Selection | ✅ Complete |
+| 2 | name | Project Name | ✅ Complete |
+| 3 | upload | Document Upload | ✅ Complete |
+| 4 | company | Company Info Review | ✅ Complete |
+| 5 | financials | Financials Review | ✅ Complete |
+| 6 | insights | Business Intelligence | ✅ Complete |
+| 7 | forecast | Forecast Builder | ✅ UI Complete (logic pending) |
+| 8 | deal_assumptions | Deal Assumptions | ✅ UI Complete (logic pending) |
+| 9 | capital_structure | Capital Structure | ✅ UI Complete (logic pending) |
+| 10 | results | Results Dashboard | ✅ UI Complete (logic pending) |
+
+---
+
+## Remaining Work
+
+### Phase 8B: Business Logic (Priority: HIGH) 🔄
+
+Connect the UI-only pages to actual data and calculations:
+
+| # | Task | Description | Files |
+|---|------|-------------|-------|
+| 1 | **Forecast Page Logic** | Load financials from project, enable growth rate editing, calculate projections | `forecast/page.tsx` |
+| 2 | **Deal Assumptions Logic** | Save entry/exit dates, multiples, fees to project data. Load EBITDA from financials for valuation multiples tables. | `deal-assumptions/page.tsx` |
+| 3 | **Capital Structure Logic** | Save debt tranches to project. Calculate sources & uses from actual deal data. | `capital-structure/page.tsx` |
+| 4 | **Results Page Logic** | Call `/api/projects/{id}/analyze`, display actual IRR, MOIC, cash flows. | `results/page.tsx` |
+| 5 | **Wizard Navigation** | Ensure step-by-step data persistence and validation | `wizard-context.tsx` |
+
+### Phase 9: Export Refinement (Priority: Medium)
+
+| # | Task | Description |
+|---|------|-------------|
+| 6 | **Excel Export Template** | Create polished Excel template with proper formatting, formulas, and all LBO outputs |
+| 7 | **PDF Report** | Optional: Generate PDF summary report |
+
+### Phase 10: Infrastructure (Priority: Medium)
+
+| # | Task | Description |
+|---|------|-------------|
+| 8 | **End-to-End Testing** | Full flow testing from upload to results |
+| 9 | **Error Handling** | Comprehensive error states and recovery |
+| 10 | **CI/CD & Docker** | GitHub Actions pipeline, Docker setup |
+
+### Phase 11: Deployment (Priority: High)
+
+| # | Task | Description |
+|---|------|-------------|
+| 11 | **Deployment Options** | Evaluate: Railway, Fly.io, self-hosted VPS, Coolify |
+| 12 | **Deploy to finline.app** | Production deployment with SSL, monitoring |
+| 13 | **Marketing Plan** | Launch strategy, pricing tiers |
+
+---
+
 ## Commands Reference
 
 ### Start Backend
@@ -175,59 +257,29 @@ pytest tests/ -v
 | Backend | Python 3.11+ / FastAPI |
 | Database | SQLite with JSON columns |
 | Frontend | Next.js 14 / React 18 / TypeScript |
-| Styling | Tailwind CSS |
-| Auth | JWT + bcrypt |
+| Styling | Tailwind CSS + shadcn/ui |
+| Auth | JWT + bcrypt (auto-refresh) |
 | LLM | OpenAI / Claude / Gemini (configurable) |
 | Payments | Stripe |
 | Testing | pytest (backend) |
 
 ---
 
-## Remaining Work
+## Key Files Reference
 
-The wizard flow (Dashboard → Type → Name → Upload → Company → Financials → Insights) is complete. The following major items remain:
+### Backend
+- `backend/services/extraction/extractor.py` - Document extraction with hybrid text+image, EBIT normalization
+- `backend/engine/lbo.py` - LBO calculation engine
+- `backend/api/projects.py` - Project CRUD endpoints
 
-### Phase 8: Core LBO Pages (Priority: High)
+### Frontend
+- `frontend/src/app/project-wizard/` - All 10 wizard pages
+- `frontend/src/contexts/wizard-context.tsx` - Wizard state management
+- `frontend/src/types/wizard.ts` - Step definitions and types
+- `frontend/src/lib/api.ts` - API client
 
-| # | Task | Description | Complexity |
-|---|------|-------------|------------|
-| 1 | **Forecast Builder Page** | Complex financial projections with linked formulas. Must ensure integrity between income statement, balance sheet, and cash flow. Support multiple cases (base, upside, downside). | High |
-| 2 | **Transaction Parameters Page** | Deal date, exit date, entry/exit valuation methods, multiples, fees, tax rate. | Medium |
-| 3 | **Capital Structure Page** | Debt tranche configuration: term loans, revolvers, mezzanine, PIK, amortization schedules, covenants. | High |
-| 4 | **Re-import LBO Engine** | Port and integrate the full LBO calculation engine from FinForge. IRR, MOIC, debt schedules, cash sweeps. | High |
-| 5 | **Results/Summary Page** | Returns dashboard, sensitivity tables, charts, key metrics. | Medium |
-
-### Phase 9: Export & Payments (Priority: Medium)
-
-| # | Task | Description |
-|---|------|-------------|
-| 6 | **Excel Export Template** | Create new Excel template with proper formatting, formulas, and wire extraction data into template. |
-| 7 | **Stripe Integration** | Set up payment flows, subscription management, customer portal, webhooks. |
-
-### Phase 10: Infrastructure (Priority: Medium)
-
-| # | Task | Description |
-|---|------|-------------|
-| 8 | **Data Persistence** | Ensure users can return and find their LBO cases. Session management, auto-save. |
-| 9 | **Analytics Page** | Usage metrics, model statistics, user activity tracking. |
-| 10 | **Testing** | End-to-end testing at every step. Unit tests, integration tests. |
-| 11 | **CI/CD & Docker** | GitHub Actions pipeline, Dockerize frontend and backend, docker-compose for local dev. |
-
-### Phase 11: Deployment (Priority: High)
-
-| # | Task | Description |
-|---|------|-------------|
-| 12 | **Deployment Options** | Evaluate alternatives to current expensive stack (Vercel + Render). Consider: Railway, Fly.io, self-hosted VPS, Coolify. |
-| 13 | **Deploy to finline.app** | Replace current FinForge deployment with finLine. DNS migration, SSL, monitoring. |
-| 14 | **Marketing Plan** | Launch strategy, landing page copy, pricing tiers, user acquisition channels. |
-
-### Estimated Timeline
-
-| Phase | Duration | Dependencies |
-|-------|----------|--------------|
-| Phase 8 (Core LBO) | 3-4 weeks | None |
-| Phase 9 (Export/Payments) | 1-2 weeks | Phase 8 |
-| Phase 10 (Infrastructure) | 1-2 weeks | Parallel with Phase 9 |
-| Phase 11 (Deployment) | 1 week | Phase 8-10 complete |
-
-**Total remaining: ~6-9 weeks**
+### Custom Components
+- `PercentageInput` - Shows value with % suffix (e.g., "5%"), no spinners
+- `NumberInput` - Plain number input, no spinners
+- `MultipleInput` - Shows value with x suffix (e.g., "7.0x")
+- `MonthYearPicker` - Month/year date picker for deal dates

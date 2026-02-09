@@ -2,8 +2,8 @@
 
 > A simplified financial modeling platform - rebuilt from finForge learnings
 
-**Status:** Mid-Implementation (Wizard flow complete, LBO engine pending)
-**Last Updated:** 2026-01-19
+**Status:** Phase 8 UI Complete - Business Logic Pending
+**Last Updated:** 2026-02-09
 
 ---
 
@@ -13,6 +13,7 @@ finLine is a focused LBO/financial modeling tool with:
 - **Simple data input** - user provides financials, we don't guess
 - **Chat-assisted editing** - natural language updates to the model
 - **Clean architecture** - SQLite, minimal endpoints, snake_case everywhere
+- **10-step wizard flow** - guided project creation and analysis
 
 ---
 
@@ -123,32 +124,6 @@ finLine is a focused LBO/financial modeling tool with:
           "repayment_seniority": 1,
           "amortization": "10/10/10/10/10/50",
           "percentage_drawn_at_deal_date": 1.0
-        },
-        {
-          "tranche_id": "rcf_1",
-          "label": "Revolving Credit Facility",
-          "type": "RCF",
-          "currency": "USD",
-          "original_size": 50.0,
-          "maturity": "2031-06-30",
-          "interest_margin": 0.035,
-          "undrawn_fee": 0.005,
-          "seniority": 1,
-          "percentage_drawn_at_deal_date": 0.0
-        },
-        {
-          "tranche_id": "mezz_1",
-          "label": "Mezzanine Notes",
-          "type": "Junior Notes",
-          "currency": "USD",
-          "original_size": 75.0,
-          "maturity": "2034-06-30",
-          "cash_interest_rate": 0.06,
-          "pik_interest_rate": 0.04,
-          "seniority": 2,
-          "repayment_seniority": 2,
-          "amortization": "",
-          "percentage_drawn_at_deal_date": 1.0
         }
       ],
       "reference_rate_curve": {
@@ -156,124 +131,39 @@ finLine is a focused LBO/financial modeling tool with:
         "currency": "USD",
         "points": [
           { "period": "2026", "rate": 0.045 },
-          { "period": "2027", "rate": 0.04 },
-          { "period": "2028", "rate": 0.035 }
+          { "period": "2027", "rate": 0.04 }
         ]
       }
-    },
-
-    "equity_injection": null
+    }
   },
 
   "financials": {
     "income_statement": {
-      "revenue": {
-        "2023": { "value_type": "hardcode", "value": 100.0 },
-        "2024": { "value_type": "hardcode", "value": 110.0 },
-        "2025": { "value_type": "hardcode", "value": 121.0 },
-        "2026": { "value_type": "growthFormula", "growth_rate": 0.10 },
-        "2027": { "value_type": "growthFormula", "growth_rate": 0.10 }
-      },
-
-      "ebitda": [
-        {
-          "origin": "sourced",
-          "primary_use": 1,
-          "user_desc": "From financial statements",
-          "data": {
-            "2023": { "value_type": "hardcode", "value": 20.0 },
-            "2024": { "value_type": "hardcode", "value": 22.0 },
-            "2025": { "value_type": "hardcode", "value": 24.2 }
-          }
-        }
-      ],
-
-      "ebit": [
-        {
-          "data": {
-            "2023": { "value_type": "hardcode", "value": 15.0 },
-            "2024": { "value_type": "hardcode", "value": 16.5 },
-            "2025": { "value_type": "hardcode", "value": 18.2 }
-          }
-        }
-      ],
-
-      "d_and_a": [
-        {
-          "data": {
-            "2023": { "value_type": "hardcode", "value": 5.0 },
-            "2024": { "value_type": "hardcode", "value": 5.5 },
-            "2025": { "value_type": "hardcode", "value": 6.0 }
-          }
-        }
-      ]
+      "revenue": { "2024": 100.0, "2025": 110.0 },
+      "ebitda": { "2024": 20.0, "2025": 22.0 },
+      "ebit": { "2024": 15.0, "2025": 16.5 },
+      "d_and_a": { "2024": 5.0, "2025": 5.5 }
     },
-
     "cash_flow_statement": {
-      "capex": {
-        "2023": { "value_type": "hardcode", "value": 8.0 },
-        "2024": { "value_type": "hardcode", "value": 8.8 },
-        "2025": { "value_type": "hardcode", "value": 9.7 }
-      },
-
-      "working_capital": {
-        "2023": { "value_type": "hardcode", "value": 15.0 },
-        "2024": { "value_type": "hardcode", "value": 16.5 },
-        "2025": { "value_type": "hardcode", "value": 18.2 }
-      }
+      "capex": { "2024": 8.0, "2025": 8.8 },
+      "working_capital": { "2024": 15.0, "2025": 16.5 }
     }
   }
 }
 ```
 
-### EBITDA Dual Entry (Preserved)
-
-When EBITDA is not directly available but EBIT and D&A are:
-
-```json
-"ebitda": [
-  {
-    "origin": "calculated",
-    "primary_use": 1,
-    "user_desc": "EBITDA = EBIT + D&A",
-    "data": {
-      "2023": { "value_type": "formula", "expression": "ebit + d_and_a" },
-      "2024": { "value_type": "formula", "expression": "ebit + d_and_a" }
-    }
-  }
-]
-```
-
-The engine will:
-1. Check if EBITDA is provided (sourced)
-2. If not, check if EBIT and D&A are provided
-3. If yes, auto-calculate EBITDA = EBIT + D&A
-4. Store as "calculated" origin
-
-### Validation Rules
-
-**Sanity checks only:**
-- Revenue must be non-negative
-- EBITDA margin reasonable (-50% to +80%)
-- Interest rates 0-100%
-- Exit date after deal date
-- At least one debt tranche OR equity-only deal
-
-**NOT validating:**
-- Whether all years have data (user's responsibility)
-- P&L consistency (no COGS/OpEx to check against)
-- Complex business rules
-
 ---
 
 ## 2. API Design
 
-### Endpoints (7 total)
+### Endpoints (28 total)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | POST | `/api/auth/register` | Create account |
 | POST | `/api/auth/login` | Login, get JWT |
+| POST | `/api/auth/refresh` | Refresh token |
+| GET | `/api/auth/me` | Get current user |
 | GET | `/api/projects` | List user's projects |
 | POST | `/api/projects` | Create new project |
 | GET | `/api/projects/{id}` | Get project data |
@@ -320,19 +210,10 @@ The engine will:
 {
   "understood": true,
   "changes": [
-    { "path": "cases.base_case.financials.capex.2026", "old": 11.7, "new": 10.0 },
-    { "path": "cases.base_case.financials.capex.2027", "old": 12.9, "new": 10.0 },
-    ...
+    { "path": "cases.base_case.financials.capex.2026", "old": 11.7, "new": 10.0 }
   ],
   "message": "Updated CAPEX to 10M for years 2026-2030 in base case.",
   "applied": true
-}
-
-// Response (if ambiguous)
-{
-  "understood": false,
-  "clarification_needed": "Which case would you like to update? (base_case, upside_case, downside_case)",
-  "applied": false
 }
 ```
 
@@ -340,56 +221,49 @@ The engine will:
 
 ## 3. Page Structure
 
-### Pages (5 total)
+### Wizard Flow (10 Steps)
+
+| Step | Route | Purpose |
+|------|-------|---------|
+| 1 | `/project-wizard/type` | Select project type (LBO, etc.) |
+| 2 | `/project-wizard/name` | Enter project name |
+| 3 | `/project-wizard/upload` | Upload documents for extraction |
+| 4 | `/project-wizard/company` | Review company metadata |
+| 5 | `/project-wizard/financials` | Review/edit extracted financials |
+| 6 | `/project-wizard/insights` | Business intelligence (5 tabs) |
+| 7 | `/project-wizard/forecast` | Financial projections |
+| 8 | `/project-wizard/deal-assumptions` | Entry/exit parameters |
+| 9 | `/project-wizard/capital-structure` | Debt tranches, sources & uses |
+| 10 | `/project-wizard/results` | LBO results dashboard |
+
+### Other Pages
 
 | Page | Route | Purpose |
 |------|-------|---------|
 | **Landing** | `/` | Marketing page, login/signup CTAs |
 | **Dashboard** | `/dashboard` | Project list, create new |
-| **Project** | `/project/{id}` | Main modeling interface |
 | **Settings** | `/settings` | Account, billing (Stripe) |
-| **Insights** | `/project/{id}/insights` | AI-generated analysis |
 
-### Project Page Layout
-
-The main project page is a **single-page interface** with tabs/sections:
+### Results Page Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Header: Project Name | Case Selector | Export | Analyze   │
 ├─────────────────────────────────────────────────────────────┤
+│  Executive Summary                                          │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  Chat Box (collapsible right panel)                 │   │
-│  │  "Set CAPEX to 5% of revenue for all years"        │   │
+│  │ IRR: 25.3%  │  MOIC: 2.5x  │  Entry: 7.0x  │ Exit: 6.0x│
 │  └─────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────┤
-│  Tabs: [ Financials | Deal | Debt | Results ]              │
+│  Sources & Uses (side by side)                              │
 ├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Financial Table (editable)                         │   │
-│  │                                                     │   │
-│  │  Metric      │ 2024  │ 2025  │ 2026E │ 2027E │ ... │   │
-│  │  ──────────────────────────────────────────────────│   │
-│  │  Revenue     │ 121.0 │ 133.1 │ 146.4 │ 161.0 │     │   │
-│  │  Growth %    │  10%  │  10%  │  10%  │  10%  │     │   │
-│  │  EBITDA      │  24.2 │  26.6 │  29.3 │  32.2 │     │   │
-│  │  Margin %    │  20%  │  20%  │  20%  │  20%  │     │   │
-│  │  D&A         │   6.0 │   6.6 │   7.3 │   8.0 │     │   │
-│  │  CAPEX       │   9.7 │  10.6 │  11.7 │  12.9 │     │   │
-│  │  Working Cap │  18.2 │  20.0 │  22.0 │  24.2 │     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
+│  Returns Waterfall (collapsible Entry/Exit details)         │
+├─────────────────────────────────────────────────────────────┤
+│  Forecast & Cash Flows Table                                │
+├─────────────────────────────────────────────────────────────┤
+│  Credit Ratios Table                                        │
 └─────────────────────────────────────────────────────────────┘
 ```
-
-### No Wizard
-
-Project creation is simple:
-1. Click "New Project" on Dashboard
-2. Modal: Enter project name, upload files (optional)
-3. If files uploaded → extraction runs → lands on Project page with data
-4. If no files → lands on empty Project page → user fills in data
 
 ---
 
@@ -398,7 +272,9 @@ Project creation is simple:
 ```
 finLine/
 ├── README.md
-├── ARCHITECTURE.md          # This file
+├── ARCHITECTURE.md
+├── IMPLEMENTATION_PLAN.md
+├── FRONTEND_REBUILD_PLAN.md
 ├── .gitignore
 │
 ├── backend/
@@ -408,41 +284,29 @@ finLine/
 │   ├── main.py              # FastAPI app entry
 │   │
 │   ├── api/
-│   │   ├── __init__.py
 │   │   ├── auth.py          # Auth endpoints
 │   │   ├── projects.py      # Project CRUD
 │   │   ├── analysis.py      # LBO analysis
 │   │   ├── extraction.py    # Document extraction
 │   │   └── chat.py          # Chat interface
 │   │
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── user.py          # User model
-│   │   ├── project.py       # Project model
-│   │   └── schemas.py       # Pydantic schemas
-│   │
 │   ├── engine/
-│   │   ├── __init__.py
-│   │   ├── lbo.py           # LBO calculations (simplified)
+│   │   ├── lbo.py           # LBO calculations
 │   │   ├── debt.py          # Debt schedules
 │   │   └── returns.py       # IRR, MOIC
 │   │
 │   ├── services/
-│   │   ├── __init__.py
-│   │   ├── llm.py           # LLM abstraction (Gemini/Claude/etc)
+│   │   ├── llm.py           # LLM abstraction
 │   │   ├── extraction/      # Document extraction module
-│   │   │   ├── extractor.py           # Main orchestrator
+│   │   │   ├── extractor.py           # Main orchestrator (hybrid text+image)
 │   │   │   ├── file_handler.py        # PDF/image processing
-│   │   │   ├── text_extractor.py      # Hybrid text extraction (PyMuPDF)
-│   │   │   ├── image_optimizer.py     # Image optimization for LLM
+│   │   │   ├── text_extractor.py      # PyMuPDF text extraction
+│   │   │   ├── image_optimizer.py     # Image optimization
 │   │   │   ├── prompts.py             # Extraction prompts
-│   │   │   ├── langchain_business_insights.py  # LangChain for insights
-│   │   │   └── models.py              # Extraction data models
-│   │   ├── insights.py      # Perplexity integration
+│   │   │   └── langchain_business_insights.py
 │   │   └── excel.py         # Excel export
 │   │
 │   └── tests/
-│       ├── __init__.py
 │       ├── test_auth.py
 │       ├── test_projects.py
 │       └── test_engine.py
@@ -451,48 +315,42 @@ finLine/
 │   ├── package.json
 │   ├── next.config.js
 │   ├── tailwind.config.ts
-│   ├── tsconfig.json
-│   │
-│   ├── public/
-│   │   └── ...
 │   │
 │   └── src/
 │       ├── app/
-│       │   ├── layout.tsx       # Root layout
-│       │   ├── page.tsx         # Landing page
-│       │   ├── dashboard/
-│       │   │   └── page.tsx     # Project list
-│       │   ├── project/
-│       │   │   └── [id]/
-│       │   │       └── page.tsx # Main project interface
-│       │   ├── settings/
-│       │   │   └── page.tsx     # Account & billing
-│       │   └── login/
-│       │       └── page.tsx     # Auth page
+│       │   ├── layout.tsx
+│       │   ├── page.tsx              # Landing
+│       │   ├── dashboard/page.tsx
+│       │   ├── project-wizard/
+│       │   │   ├── layout.tsx        # Wizard wrapper
+│       │   │   ├── type/page.tsx
+│       │   │   ├── name/page.tsx
+│       │   │   ├── upload/page.tsx
+│       │   │   ├── company/page.tsx
+│       │   │   ├── financials/page.tsx
+│       │   │   ├── insights/page.tsx
+│       │   │   ├── forecast/page.tsx
+│       │   │   ├── deal-assumptions/page.tsx
+│       │   │   ├── capital-structure/page.tsx
+│       │   │   └── results/page.tsx
+│       │   └── settings/page.tsx
 │       │
 │       ├── components/
-│       │   ├── ui/              # Radix UI components (copy from finForge)
-│       │   ├── layout/
-│       │   │   ├── header.tsx
-│       │   │   ├── sidebar.tsx
-│       │   │   └── footer.tsx
-│       │   ├── project/
-│       │   │   ├── financial_table.tsx
-│       │   │   ├── deal_form.tsx
-│       │   │   ├── debt_config.tsx
-│       │   │   ├── results_view.tsx
-│       │   │   └── chat_panel.tsx
-│       │   └── common/
-│       │       ├── loading.tsx
-│       │       └── error.tsx
+│       │   ├── ui/              # shadcn/ui components
+│       │   ├── layout/          # Wizard layout, sidebar
+│       │   └── debug/           # JSON viewer for development
+│       │
+│       ├── contexts/
+│       │   └── wizard-context.tsx
 │       │
 │       ├── lib/
 │       │   ├── api.ts           # API client
-│       │   ├── auth.ts          # Auth utilities
 │       │   └── utils.ts         # Helpers
 │       │
 │       └── types/
-│           └── index.ts         # TypeScript types (snake_case)
+│           ├── index.ts
+│           ├── wizard.ts        # Wizard step definitions
+│           └── project.ts
 │
 └── data/
     └── finline.db               # SQLite database file
@@ -500,209 +358,11 @@ finLine/
 
 ---
 
-## 5. Migration Plan
-
-### What to Port from finForge
-
-| Component | Source | Action |
-|-----------|--------|--------|
-| **LBO Engine** | `/backend/finbackend/analysis/` | Simplify & port |
-| **Debt Calculations** | `/backend/finbackend/models/financial_structures.py` | Port DebtTranche logic |
-| **Auth System** | `/backend/api/auth.py` | Port JWT + bcrypt |
-| **Document Extraction** | `/backend/api/main.py` (extract endpoints) | Port & simplify |
-| **Perplexity Integration** | `/backend/finbackend/` | Port as-is |
-| **UI Components** | `/frontend/firebase2/src/components/ui/` | Copy Radix components |
-| **Design Tokens** | `/frontend/firebase2/tailwind.config.ts` | Copy color palette |
-| **Landing Page** | `/frontend/firebase2/src/components/landing/` | Adapt |
-
-### What NOT to Port
-
-- Revenue driver formula system
-- P&L case detection (A1.1-B3 cases)
-- DSO/DIO/DPO working capital modeling
-- Complex schema validation (780 lines → ~100 lines)
-- Wizard flow (15 steps)
-- Multiple Zustand stores
-- Event log / undo-redo system (v2 feature)
-
-### Migration Sequence
-
-**Phase 1: Foundation (Week 1)**
-1. Set up project structure
-2. SQLite database with basic tables
-3. Auth system (port from finForge)
-4. Basic API scaffolding
-
-**Phase 2: Core Features (Week 2-3)**
-1. Project CRUD
-2. Financial data model
-3. Simple LBO calculations
-4. Basic frontend with financial table
-
-**Phase 3: AI Features (Week 4)**
-1. Document extraction
-2. Chat interface
-3. Insights (Perplexity)
-
-**Phase 4: Polish (Week 5)**
-1. Excel export
-2. Stripe integration
-3. UI refinement
-4. Testing
-
----
-
-## 6. Technical Specifications
-
-### SQLite Schema
-
-```sql
--- Users table
-CREATE TABLE users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    is_active INTEGER DEFAULT 1,
-    created_at TEXT NOT NULL,
-    last_login TEXT
-);
-
--- Projects table
-CREATE TABLE projects (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    data JSON NOT NULL,  -- Full project data as JSON
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Extractions table (for tracking document processing)
-CREATE TABLE extractions (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    status TEXT NOT NULL,  -- pending, processing, completed, failed
-    source_files JSON,     -- List of uploaded file names
-    extracted_data JSON,   -- Raw extraction result
-    created_at TEXT NOT NULL,
-    completed_at TEXT,
-    FOREIGN KEY (project_id) REFERENCES projects(id)
-);
-
--- Indexes
-CREATE INDEX idx_projects_user ON projects(user_id);
-CREATE INDEX idx_extractions_project ON extractions(project_id);
-```
-
-### Environment Variables
-
-```bash
-# Backend
-DATABASE_URL=sqlite:///./data/finline.db
-JWT_SECRET_KEY=your-secret-key-here
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-
-# LLM Configuration
-LLM_PROVIDER=gemini          # gemini, claude, openai
-LLM_MODEL=gemini-2.0-flash
-LLM_API_KEY=your-api-key
-
-# Perplexity (for insights)
-PERPLEXITY_API_KEY=your-api-key
-
-# Stripe
-STRIPE_SECRET_KEY=your-stripe-key
-STRIPE_WEBHOOK_SECRET=your-webhook-secret
-
-# Frontend
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### API Response Format
-
-All API responses follow this structure:
-
-```json
-// Success
-{
-    "success": true,
-    "data": { ... }
-}
-
-// Error
-{
-    "success": false,
-    "error": {
-        "code": "VALIDATION_ERROR",
-        "message": "Revenue cannot be negative",
-        "field": "cases.base_case.financials.revenue.2026"
-    }
-}
-```
-
----
-
-## 7. Chat Interface Specification
-
-### Supported Commands (Natural Language)
-
-The chat understands patterns like:
-
-**Setting Values:**
-- "Set CAPEX to 10M for 2026"
-- "Set all CAPEX values to 10M"
-- "Set revenue to 100, 110, 120, 130, 140 for years 2026-2030"
-
-**Growth/Percentages:**
-- "Increase CAPEX by 5% each year"
-- "Set revenue growth to 8% for all forecast years"
-- "Apply 20% EBITDA margin across all years"
-
-**Formulas:**
-- "Set CAPEX to 5% of revenue for each year"
-- "Set D&A to 3% of revenue"
-
-**Bulk Operations:**
-- "Copy base case to upside case"
-- "Increase all upside case revenues by 10%"
-
-**Image Upload:**
-- User uploads screenshot of Excel → extract numbers → apply to model
-
-### Chat Architecture
-
-```
-User Input
-    │
-    ▼
-┌─────────────────┐
-│  Parse Intent   │  ← LLM (Gemini Flash)
-│  Extract Params │
-└────────┬────────┘
-         │
-         ▼
-    ┌────────────┐
-    │ Ambiguous? │
-    └────┬───────┘
-         │
-    No ──┴── Yes
-    │         │
-    ▼         ▼
-┌────────┐  ┌───────────────┐
-│ Apply  │  │ Ask for       │
-│ Update │  │ Clarification │
-└────────┘  └───────────────┘
-```
-
----
-
-## 8. Document Extraction Architecture
+## 5. Document Extraction Architecture
 
 ### Hybrid Text+Image Extraction
 
-finLine uses hybrid extraction (ported from FinForge) for accurate financial data parsing:
+finLine uses hybrid extraction for accurate financial data parsing:
 
 ```
 PDF Upload
@@ -736,47 +396,102 @@ PDF Upload
 │  - Financial data   │
 │  - Business insights│
 └─────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  Normalize          │
+│  - D&A deduplication│
+│  - EBIT mapping     │ ← income_from_operations → ebit
+└─────────────────────┘
 ```
 
 **Why Hybrid Extraction?**
 
 Image-only extraction caused the LLM to visually misinterpret numbers like "282,836" as "282.836" (European decimal format). By extracting actual text from PDFs using PyMuPDF and including it in the prompt, the LLM correctly parses comma-separated thousands.
 
-### Configuration
+**EBIT Normalization**
 
-```python
-# config.py - ExtractionConfig
-USE_HYBRID_TEXT_IMAGE: bool = True    # Enable text+image extraction
-USE_LANGCHAIN_BUSINESS_INSIGHTS: bool = True  # LangChain for insights
-TEXT_QUALITY_THRESHOLD: float = 0.7   # Min quality for text extraction
-
-# Temperature settings (match FinForge exactly)
-TEMP_METADATA: float = 0.1
-TEMP_FINANCIAL_DATA: float = 0.1
-TEMP_BUSINESS_INSIGHTS: float = 0.05
-```
-
-### Business Insights Extraction
-
-Uses LangChain with structured prompts for:
-- Information extraction (business description, revenue model, management)
-- Strategic analysis (SWOT, risks, industry context)
-- Perplexity integration for market research
+LLMs sometimes extract EBIT under different field names. The extractor normalizes these:
+- `income_from_operations` → `ebit`
+- `operating_income` → `ebit`
+- `operating_profit` → `ebit`
+- `operating_earnings` → `ebit`
 
 ---
 
-## 9. Key Simplifications Summary
+## 6. Technical Specifications
+
+### SQLite Schema
+
+```sql
+-- Users table
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_login TEXT
+);
+
+-- Projects table
+CREATE TABLE projects (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    data JSON NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Extractions table
+CREATE TABLE extractions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    source_files JSON,
+    extracted_data JSON,
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+```
+
+### Environment Variables
+
+```bash
+# Backend
+DATABASE_URL=sqlite:///./data/finline.db
+JWT_SECRET_KEY=your-secret-key-here
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# LLM Configuration
+LLM_PROVIDER=openai          # openai, claude, gemini
+LLM_MODEL=gpt-4o
+LLM_API_KEY=your-api-key
+
+# Stripe
+STRIPE_SECRET_KEY=your-stripe-key
+
+# Frontend
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+---
+
+## 7. Key Simplifications Summary
 
 | Aspect | finForge | finLine |
 |--------|----------|---------|
 | Schema | 780 lines, 16 types | ~100 lines, 3 types |
-| Endpoints | 20+ | 7-10 |
-| Pages | 24+ | 5 |
-| State Management | Zustand stores | React Query only |
+| Endpoints | 20+ | 28 (well-organized) |
+| Wizard Steps | 15 steps | 10 steps |
+| Pages | 24+ | 12 |
+| State Management | Zustand stores | React Context |
 | Revenue Modeling | Driver formulas | Growth % |
 | Working Capital | DSO/DIO/DPO | Total only |
 | P&L Detection | 8 case types | None (user provides) |
 | Naming | Mixed case | snake_case everywhere |
 | Data Storage | JSON files + locking | SQLite with ACID |
-| Wizard | 15 steps | None (modal + direct edit) |
-

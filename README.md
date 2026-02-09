@@ -2,7 +2,7 @@
 
 A simplified LBO financial modeling platform with AI-powered features.
 
-**Status:** Mid-Implementation | [See Implementation Plan](IMPLEMENTATION_PLAN.md)
+**Status:** Phase 8 Complete (UI) | Business Logic Pending | [See Implementation Plan](IMPLEMENTATION_PLAN.md)
 
 ## Features
 
@@ -11,6 +11,8 @@ A simplified LBO financial modeling platform with AI-powered features.
 - **Document Extraction** - Extract financials from PDFs and images
   - Hybrid text+image extraction for accurate number parsing
   - LangChain-powered business insights
+  - EBIT/D&A field normalization
+- **10-Step Wizard Flow** - Type → Name → Upload → Company → Financials → Insights → Forecast → Deal → Capital → Results
 - **Excel Export** - Full model export with formulas
 - **Multiple Cases** - Base, upside, downside scenarios
 - **Full Debt Modeling** - Term loans, revolvers, PIK, amortization schedules
@@ -22,8 +24,8 @@ A simplified LBO financial modeling platform with AI-powered features.
 | Backend | Python 3.11+ / FastAPI |
 | Database | SQLite with JSON columns |
 | Frontend | Next.js 14 / React 18 / TypeScript |
-| Styling | Tailwind CSS |
-| Auth | JWT + bcrypt |
+| Styling | Tailwind CSS + shadcn/ui |
+| Auth | JWT + bcrypt (with auto-refresh) |
 | LLM | OpenAI / Claude / Gemini (configurable) |
 | Payments | Stripe |
 
@@ -67,8 +69,22 @@ finLine/
 │   └── tests/         # pytest test suite
 ├── frontend/
 │   └── src/
-│       ├── app/       # Next.js pages
-│       └── lib/       # API client, utilities
+│       ├── app/
+│       │   ├── project-wizard/  # 10-step wizard flow
+│       │   │   ├── type/
+│       │   │   ├── name/
+│       │   │   ├── upload/
+│       │   │   ├── company/
+│       │   │   ├── financials/
+│       │   │   ├── insights/
+│       │   │   ├── forecast/
+│       │   │   ├── deal-assumptions/
+│       │   │   ├── capital-structure/
+│       │   │   └── results/
+│       │   └── dashboard/
+│       ├── components/  # UI components (shadcn/ui)
+│       ├── contexts/    # Wizard state management
+│       └── lib/         # API client, utilities
 └── data/              # SQLite database (gitignored)
 ```
 
@@ -77,6 +93,7 @@ finLine/
 ### Auth
 - `POST /api/auth/register` - Create account
 - `POST /api/auth/login` - Login, get JWT
+- `POST /api/auth/refresh` - Refresh token
 - `GET /api/auth/me` - Get current user
 
 ### Projects
@@ -88,6 +105,7 @@ finLine/
 - `POST /api/projects/{id}/analyze` - Run LBO analysis
 - `POST /api/projects/{id}/export` - Export to Excel
 - `POST /api/projects/{id}/chat` - AI chat updates
+- `POST /api/projects/{id}/extract` - Document extraction
 
 ## Environment Variables
 
@@ -109,6 +127,26 @@ cd backend
 source .venv/bin/activate
 pytest tests/ -v
 ```
+
+## Current Status
+
+### Completed
+- ✅ Full backend API (28 endpoints)
+- ✅ LBO calculation engine
+- ✅ Document extraction with hybrid text+image
+- ✅ 10-step wizard UI (all pages built)
+- ✅ JWT auth with auto-refresh
+- ✅ EBIT normalization (handles income_from_operations, operating_income variants)
+
+### In Progress
+- 🔄 Business logic for wizard pages (connecting UI to backend)
+- 🔄 Forecast builder calculations
+- 🔄 Deal assumptions to LBO engine integration
+
+### Pending
+- ⏳ Full end-to-end testing
+- ⏳ Excel export template refinement
+- ⏳ Deployment to production
 
 ## License
 
